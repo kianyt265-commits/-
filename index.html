@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#123d36" />
+    <title>استودیو بینش اینستاگرام</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand-lockup">
+          <div class="brand-mark"><span></span><i></i><b></b></div>
+          <div>
+            <strong>استودیو بینش</strong>
+            <small>رشد هوشمند اینستاگرام</small>
+          </div>
+        </div>
+
+        <div class="workspace-switcher" title="تغییر فضای کاری">
+          <div class="avatar avatar-photo">ن</div>
+          <div class="workspace-name"><strong>niloofar.studio</strong><span>فضای کاری اصلی</span></div>
+          <span class="chevron">⌄</span>
+        </div>
+
+        <div class="nav-label">داشبورد</div>
+        <nav class="primary-nav" aria-label="منوی اصلی">
+          <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span><span>نمای کلی</span><em>۱</em></button>
+          <button class="nav-item" data-view="posts"><span class="nav-icon">▦</span><span>محتوا و پست‌ها</span></button>
+          <button class="nav-item" data-view="stories"><span class="nav-icon">◉</span><span>عملکرد استوری</span></button>
+          <button class="nav-item" data-view="calendar"><span class="nav-icon">▣</span><span>تقویم محتوا</span><em class="nav-count">۳</em></button>
+          <button class="nav-item" data-view="audience"><span class="nav-icon">♧</span><span>مخاطب‌شناسی</span></button>
+          <button class="nav-item" data-view="trends"><span class="nav-icon">↗</span><span>رادار ترند</span><span class="new-pill">تازه</span></button>
+        </nav>
+
+        <div class="nav-label nav-label-spaced">ابزارهای رشد</div>
+        <nav class="secondary-nav" aria-label="ابزارهای رشد">
+          <button class="nav-item" data-view="competitors"><span class="nav-icon">⇄</span><span>مقایسه رقبا</span></button>
+          <button class="nav-item" id="openAdvisor"><span class="nav-icon">✦</span><span>مشاور هوشمند</span><span class="online-dot"></span></button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <button class="sidebar-link" id="openData"><span>⚙</span> تنظیمات داده</button>
+          <button class="sidebar-link" id="toggleTheme"><span id="themeIcon">☾</span> حالت شب <span class="toggle-switch"><i></i></span></button>
+          <div class="sidebar-credit"><span class="credit-dot"></span><span>تحلیل بعدی: امروز، ۱۸:۳۰</span></div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <button class="mobile-menu" id="mobileMenu" aria-label="باز کردن منو">☰</button>
+          <div class="breadcrumb"><span>فضای کاری</span><b>/</b><strong id="breadcrumbTitle">نمای کلی</strong></div>
+          <div class="topbar-actions">
+            <div class="date-chip"><span class="live-pulse"></span><span>به‌روزرسانی زنده</span><small>امروز، ۱۴۰۳/۰۸/۲۴</small></div>
+            <button class="icon-button notification-button" id="showNotifications" title="اعلان‌ها"><span>♢</span><i></i></button>
+            <button class="profile-button" id="openProfile"><span class="avatar avatar-photo">ن</span><span class="profile-copy"><strong>نیلوفر احمدی</strong><small>مدیر صفحه</small></span><span class="chevron">⌄</span></button>
+          </div>
+        </header>
+        <div class="page-wrap" id="viewRoot"></div>
+      </main>
+    </div>
+
+    <div id="toastRoot" aria-live="polite"></div>
+    <div id="modalRoot"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
