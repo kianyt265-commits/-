@@ -67,6 +67,9 @@ SEED_DEMO_DATA = os.getenv("SEED_DEMO_DATA", "false").lower() in ("1", "true", "
 # opt-in only: grows the counters of the seeded sample users for screenshots
 SIMULATE_TRAFFIC = os.getenv("SIMULATE_TRAFFIC", "false").lower() in ("1", "true", "yes")
 PUBLIC_DOMAIN = os.getenv("PUBLIC_DOMAIN", "").strip()
+# BUILDER_ONLY=true turns the panel into a pure config generator:
+# no config.json rewriting, no docker restarts — just users, links, QR and subs.
+BUILDER_ONLY = os.getenv("BUILDER_ONLY", "false").lower() in ("1", "true", "yes")
 XRAY_ACCESS_LOG = os.getenv("XRAY_ACCESS_LOG", "/var/log/xray/access.log")
 FRONTEND_DIR = os.getenv(
     "FRONTEND_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend")
@@ -113,6 +116,9 @@ def audit(db: Session, actor: str, action: str, target: str = "", detail: str = 
 # ==================== xray helpers ====================
 def apply_xray_config(db: Session, restart: bool = True) -> Dict[str, Any]:
     """Push every active user into config.json and (optionally) restart xray."""
+    if BUILDER_ONLY:
+        return {"ok": True, "changed": False, "restart": None, "builder_only": True,
+                "message": "حالت کانفیگ‌ساز: تغییری در xray داده نشد"}
     users = db.query(User).all()
     servers = db.query(ServerConfig).all()
     try:
@@ -187,6 +193,37 @@ def user_warnings(db: Session, user: User) -> List[str]:
             break
     if user.security == "reality" and user.protocol == "vless" and not user.flow:
         warnings.append("برای vless/reality معمولاً flow=xtls-rprx-vision لازم است")
+    return warnings
+
+
+def is_ip_literal(value: str) -> bool:
+    import ipaddress
+
+    try:
+        ipaddress.ip_address((value or "").strip())
+        return True
+    except ValueError:
+        return False
+
+
+def server_warnings(server: ServerConfig) -> List[str]:
+    """Things that would stop this server from producing working configs."""
+    warnings: List[str] = []
+    address = (server.server_address or "").strip()
+    security = (server.security or "none").lower()
+    if address.upper() in ("YOUR_SERVER_IP", "LOCALHOST", ""):
+        warnings.append("آدرس سرور هنوز تنظیم نشده است")
+    if is_ip_literal(address) and security == "tls":
+        warnings.append(
+            "TLS بدون دامنه کار نمی‌کند — گواهی معتبر به دامنه نیاز دارد. "
+            "اگر دامنه ندارید لایهٔ امنیتی را روی REALITY بگذارید."
+        )
+    if security == "reality" and not server.reality_public_key:
+        warnings.append("کلید REALITY ساخته نشده است")
+    if (server.network or "").lower() == "grpc" and not server.service_name:
+        warnings.append("برای gRPC یک serviceName لازم است")
+    if (server.network or "").lower() in ("ws", "h2", "httpupgrade") and (server.path or "/") in ("", None):
+        warnings.append("مسیر (path) برای WebSocket خالی است")
     return warnings
 
 
@@ -672,6 +709,7 @@ async def meta(admin: str = Depends(verify_token)):
         "fingerprints": FINGERPRINTS,
         "demo_mode": SEED_DEMO_DATA,
         "simulate_traffic": SIMULATE_TRAFFIC,
+        "builder_only": BUILDER_ONLY,
         "sync_interval": SYNC_INTERVAL,
         "xray_config_path": XRAY_CONFIG_PATH,
         "public_domain": PUBLIC_DOMAIN,
@@ -894,9 +932,11 @@ async def get_users(
 def _user_from_payload(data: UserCreate) -> User:
     expire_date = utcnow() + datetime.timedelta(days=data.expire_days) if data.expire_days > 0 else None
     flow = (data.flow or "").strip()
-    # xtls-rprx-vision is only valid for vless on a REALITY/raw-tcp inbound
-    if not (data.protocol == "vless" and data.security == "reality" and data.network in ("tcp", "raw")):
-        flow = ""
+    if data.protocol == "vless" and data.security == "reality" and data.network in ("tcp", "raw"):
+        # xtls-rprx-vision is what REALITY needs; default it so links work out of the box
+        flow = flow or "xtls-rprx-vision"
+    else:
+        flow = ""  # invalid anywhere else
     return User(
         username=data.username,
         uuid_key=str(uuid.uuid4()),
@@ -1274,15 +1314,116 @@ async def get_servers(admin: str = Depends(verify_token), db: Session = Depends(
         server.id: sum(1 for u in users if ConfigGenerator.is_compatible(u, server))
         for server in servers
     }
+    payload = []
+    for server in servers:
+        row = server.to_dict()
+        row["warnings"] = server_warnings(server)
+        row["is_ip"] = is_ip_literal(server.server_address)
+        payload.append(row)
     return {
-        "servers": [s.to_dict() for s in servers],
+        "servers": payload,
         "total": len(servers),
         "users_by_server": counts,
+        "builder_only": BUILDER_ONLY,
         "placeholder_addresses": [
             s.server_name for s in servers
             if str(s.server_address).strip().upper() in ("YOUR_SERVER_IP", "", "LOCALHOST")
         ],
     }
+
+
+SERVER_PRESETS = [
+    {
+        "id": "reality-no-domain",
+        "label": "REALITY — بدون دامنه",
+        "hint": "پیشنهادی وقتی دامنه و گواهی ندارید: فقط IP سرور کافی است.",
+        "requires_domain": False,
+        "values": {
+            "server_name": "VLESS-REALITY-443", "server_port": 443, "protocol": "vless",
+            "network": "tcp", "security": "reality", "sni": "www.microsoft.com",
+            "path": "/", "inbound_tag": "VLESS-REALITY-443",
+            "reality_target": "www.microsoft.com:443",
+            "reality_server_names": "www.microsoft.com,www.apple.com",
+            "is_enabled": True, "is_default": True,
+        },
+    },
+    {
+        "id": "shadowsocks-no-domain",
+        "label": "Shadowsocks — بدون دامنه",
+        "hint": "ساده و بدون گواهی؛ نیاز به یک این‌باند shadowsocks در config.json دارد.",
+        "requires_domain": False,
+        "values": {
+            "server_name": "SS-2096", "server_port": 2096, "protocol": "shadowsocks",
+            "network": "tcp", "security": "none", "method": "chacha20-ietf-poly1305",
+            "path": "/", "inbound_tag": "", "is_enabled": True, "is_default": False,
+        },
+    },
+    {
+        "id": "vless-ws-tls",
+        "label": "VLESS + WebSocket + TLS",
+        "hint": "رایج‌ترین حالت — به دامنه و گواهی معتبر نیاز دارد.",
+        "requires_domain": True,
+        "values": {
+            "server_name": "VLESS-WS-8443", "server_port": 8443, "protocol": "vless",
+            "network": "ws", "security": "tls", "path": "/v2box-ws",
+            "inbound_tag": "VLESS-WS-8443", "is_enabled": True, "is_default": False,
+        },
+    },
+    {
+        "id": "vless-grpc-tls",
+        "label": "VLESS + gRPC + TLS",
+        "hint": "پایداری خوب روی شبکه‌های محدود — به دامنه و گواهی نیاز دارد.",
+        "requires_domain": True,
+        "values": {
+            "server_name": "VLESS-GRPC-2053", "server_port": 2053, "protocol": "vless",
+            "network": "grpc", "security": "tls", "service_name": "v2box-grpc",
+            "inbound_tag": "VLESS-GRPC-2053", "is_enabled": True, "is_default": False,
+        },
+    },
+    {
+        "id": "vmess-ws-tls",
+        "label": "VMess + WebSocket + TLS",
+        "hint": "سازگار با کلاینت‌های قدیمی‌تر — به دامنه و گواهی نیاز دارد.",
+        "requires_domain": True,
+        "values": {
+            "server_name": "VMESS-WS-2083", "server_port": 2083, "protocol": "vmess",
+            "network": "ws", "security": "tls", "path": "/v2box-vmess",
+            "inbound_tag": "VMESS-WS-2083", "is_enabled": True, "is_default": False,
+        },
+    },
+    {
+        "id": "trojan-tcp-tls",
+        "label": "Trojan + TLS",
+        "hint": "ترافیک شبیه HTTPS معمولی — به دامنه و گواهی نیاز دارد.",
+        "requires_domain": True,
+        "values": {
+            "server_name": "TROJAN-TCP-2087", "server_port": 2087, "protocol": "trojan",
+            "network": "tcp", "security": "tls", "path": "/",
+            "inbound_tag": "TROJAN-TCP-2087", "is_enabled": True, "is_default": False,
+        },
+    },
+]
+
+
+@app.get("/api/servers/presets")
+async def server_presets(with_keys: bool = True, admin: str = Depends(verify_token)):
+    """Ready-to-use server templates; REALITY ones come with fresh keys."""
+    presets = []
+    for preset in SERVER_PRESETS:
+        values = dict(preset["values"])
+        if with_keys and values.get("security") == "reality":
+            keys = xray_manager.complete_reality_keys()
+            values["reality_public_key"] = keys["public_key"]
+            values["reality_private_key"] = keys["private_key"]
+            values["reality_short_id"] = keys["short_id"]
+        presets.append({
+            "id": preset["id"],
+            "label": preset["label"],
+            "hint": preset["hint"],
+            "requires_domain": preset["requires_domain"],
+            "values": values,
+        })
+    return {"presets": presets, "builder_only": BUILDER_ONLY}
 
 
 @app.get("/api/servers/detect")
@@ -1336,7 +1477,9 @@ async def create_server(
     report = apply_xray_config(db)
     audit(db, admin, "server_created", server.server_name,
           f"{server.protocol}/{server.network}/{server.security}@{server.server_port}")
-    return {"server": server.to_dict(), "xray": report, "message": "Server added"}
+    row = server.to_dict()
+    row["warnings"] = server_warnings(server)
+    return {"server": row, "xray": report, "message": "Server added"}
 
 
 @app.put("/api/servers/{server_id}")
@@ -1368,7 +1511,9 @@ async def update_server(
     db.refresh(server)
     report = apply_xray_config(db)
     audit(db, admin, "server_updated", server.server_name, ", ".join(updates.keys()))
-    return {"server": server.to_dict(), "xray": report, "message": "Server updated"}
+    row = server.to_dict()
+    row["warnings"] = server_warnings(server)
+    return {"server": row, "xray": report, "message": "Server updated"}
 
 
 @app.delete("/api/servers/{server_id}")
@@ -1424,8 +1569,20 @@ async def server_reality_keys(server_id: str, admin: str = Depends(verify_token)
 # ==================== xray control ====================
 @app.get("/api/xray/status")
 async def xray_status(admin: str = Depends(verify_token)):
+    if BUILDER_ONLY:
+        return {
+            "builder_only": True,
+            "container": {"available": False, "running": False, "state": "builder-only"},
+            "certificate": certs.cert_status(),
+            "config": {"ok": False, "inbounds": [], "error": "builder-only mode"},
+            "version": "",
+            "docker_available": False,
+            "config_path": XRAY_CONFIG_PATH,
+            "checked_at": utcnow().isoformat(),
+        }
     container = xray_manager.container_state()
     return {
+        "builder_only": False,
         "container": container,
         "certificate": certs.cert_status(),
         "config": xray_manager.summarize_config(XRAY_CONFIG_PATH),
@@ -1452,6 +1609,9 @@ async def save_xray_config(
     admin: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
+    if BUILDER_ONLY:
+        raise HTTPException(status_code=400,
+                            detail="حالت کانفیگ‌ساز فعال است — config.json دست‌نخورد می‌ماند")
     config = payload.config
     if "inbounds" not in config or "outbounds" not in config:
         raise HTTPException(status_code=400, detail="config must contain 'inbounds' and 'outbounds'")
@@ -1470,6 +1630,9 @@ async def save_xray_config(
 
 @app.post("/api/xray/restart")
 async def restart_xray(admin: str = Depends(verify_token), db: Session = Depends(get_db)):
+    if BUILDER_ONLY:
+        raise HTTPException(status_code=400,
+                            detail="حالت کانفیگ‌ساز فعال است — هستهٔ xray مدیریت نمی‌شود")
     result = xray_manager.restart_xray()
     audit(db, admin, "xray_restarted", result.get("container", ""), result.get("message", ""))
     if not result.get("ok"):

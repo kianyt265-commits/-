@@ -64,7 +64,7 @@
           <button class="nav-item active" data-view="dashboard"><span class="nav-icon">▦</span><span>داشبورد</span></button>
           <button class="nav-item" data-view="users"><span class="nav-icon">◉</span><span>کاربران</span><em class="nav-badge" id="navUsersCount">۰</em></button>
           <button class="nav-item" data-view="servers"><span class="nav-icon">⛁</span><span>سرورها</span></button>
-          <button class="nav-item" data-view="xray"><span class="nav-icon">⚙</span><span>هستهٔ Xray</span></button>
+          <button class="nav-item" data-view="xray" id="navXray"><span class="nav-icon">⚙</span><span>هستهٔ Xray</span></button>
           <button class="nav-item" data-view="logs"><span class="nav-icon">≡</span><span>گزارش‌ها</span></button>
           <button class="nav-item" data-view="settings"><span class="nav-icon">✦</span><span>تنظیمات</span></button>
         </nav>
@@ -89,6 +89,7 @@
             <small id="pageSubtitle">نمای کلی وضعیت پنل</small>
           </div>
           <div class="topbar-actions">
+            <span class="chip chip-accent hidden" id="builderChip" title="فقط ساخت کانفیگ — هستهٔ xray مدیریت نمی‌شود">کانفیگ‌ساز</span>
             <span class="chip chip-warn" id="demoChip" title="داده‌های نمونهٔ اولیه">دادهٔ نمونه</span>
             <button class="btn btn-ghost btn-sm" id="refreshBtn" title="به‌روزرسانی">↻ تازه‌سازی</button>
             <div class="user-chip" id="userChip">

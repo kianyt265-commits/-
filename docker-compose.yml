@@ -63,6 +63,8 @@ services:
       - FRONTEND_DIR=${FRONTEND_DIR:-/app/frontend}
       - XRAY_BACKUP_DIR=${XRAY_BACKUP_DIR:-/app/data/xray-backup}
       - SEED_DEMO_DATA=${SEED_DEMO_DATA:-true}
+      - SIMULATE_TRAFFIC=${SIMULATE_TRAFFIC:-false}
+      - BUILDER_ONLY=${BUILDER_ONLY:-false}
       - PUBLIC_DOMAIN=${PUBLIC_DOMAIN:-}
       - ACCESS_TOKEN_EXPIRE_HOURS=${ACCESS_TOKEN_EXPIRE_HOURS:-24}
     volumes:

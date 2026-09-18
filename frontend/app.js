@@ -982,6 +982,8 @@ async function renderServers() {
 
       <div class="server-addr">${esc(s.server_address)}:${esc(s.server_port)}${s.path && s.path !== '/' ? esc(s.path) : ''}${s.service_name ? '/' + esc(s.service_name) : ''}</div>
 
+      ${(s.warnings || []).map((w) => `<div class="note warn" style="padding:9px 12px;font-size:12.2px">⚠ ${esc(w)}</div>`).join('')}
+
       <div class="kv">
         ${s.sni ? `<div class="kv-row"><span>SNI</span><strong>${esc(s.sni)}</strong></div>` : ''}
         ${s.security === 'reality' ? `<div class="kv-row"><span>کلید عمومی</span><strong style="font-size:11px">${esc(s.reality_public_key || '—')}</strong></div>
@@ -1008,6 +1010,7 @@ async function renderServers() {
         <button class="btn" data-action="server-import">⇪ شناسایی از config.json ${newInbounds.length ? `<span class="chip chip-accent">${num(newInbounds.length)} جدید</span>` : ''}</button>
         <button class="btn btn-primary" data-action="server-create">+ سرور جدید</button>
       </div>
+      <div id="presetRow" class="row" style="margin-bottom:12px"></div>
       ${placeholders.length ? `<div class="note danger" style="margin-bottom:12px">
         <strong>آدرس سرور تنظیم نشده است:</strong> ${placeholders.map(esc).join('، ')} —
         تا وقتی آدرس واقعی (دامنه یا IP) وارد نشود، لینک‌های ساخته‌شده برای کاربران کار نمی‌کنند.
@@ -1019,9 +1022,24 @@ async function renderServers() {
     </div>
     <div class="grid grid-3">${cards || `<div class="card"><div class="empty">
       <span class="empty-icon">⛁</span><strong>سروری ثبت نشده</strong>
-      <p>از «شناسایی از config.json» این‌باندهای آماده را وارد کنید.</p>
-      <button class="btn btn-primary" data-action="server-import">شناسایی این‌باندها</button></div></div>`}
+      <p>یکی از الگوهای آمادهٔ بالا را انتخاب کنید (بدون دامنه: REALITY).</p>
+      <button class="btn btn-primary" data-action="server-preset" data-preset="reality-no-domain">+ سرور REALITY بدون دامنه</button>
+    </div></div>`}
     </div>`;
+
+  loadPresets();
+}
+
+async function loadPresets() {
+  const row = $('#presetRow');
+  if (!row) return;
+  const data = await run('دریافت الگوها', () => api('/api/servers/presets?with_keys=false'));
+  const presets = (data && data.presets) || [];
+  row.innerHTML = `
+    <span class="chip chip-mute">الگوهای آماده:</span>
+    ${presets.map((p) => `<button class="filter-chip ${p.requires_domain ? '' : 'active'}"
+        data-action="server-preset" data-preset="${esc(p.id)}" title="${esc(p.hint)}">
+        ${esc(p.label)}${p.requires_domain ? ' <small style="opacity:.65">(با دامنه)</small>' : ''}</button>`).join('')}`;
 }
 
 function serverFormHtml(server = {}) {
@@ -1080,13 +1098,27 @@ function serverFormHtml(server = {}) {
   </form>`;
 }
 
-function openServerModal(server = null) {
+function openServerModal(server = null, preset = null) {
   const isEdit = Boolean(server);
+  const seed = isEdit ? server : { ...(preset ? preset.values : {}), ...(server || {}) };
   openModal({
-    title: isEdit ? `ویرایش سرور «${server.server_name}»` : 'سرور / این‌باند جدید',
-    subtitle: 'پس از ذخیره، config.json بازنویسی و هسته ری‌استارت می‌شود',
+    title: isEdit ? `ویرایش سرور «${server.server_name}»`
+      : (preset ? `الگوی «${preset.label}»` : 'سرور / این‌باند جدید'),
+    subtitle: preset ? preset.hint
+      : (state.meta && state.meta.builder_only
+        ? 'در حالت کانفیگ‌ساز فقط لینک‌ها بر اساس این سرور ساخته می‌شوند'
+        : 'پس از ذخیره، config.json بازنویسی و هسته ری‌استارت می‌شود'),
     size: 'wide',
-    body: serverFormHtml(server || {}),
+    body: (preset && preset.values.security === 'reality' && preset.values.reality_public_key ? `
+      <div class="note">کلیدهای REALITY به‌صورت خودکار ساخته شدند — بعد از ذخیره از کارت سرور کپی کنید.
+        <div class="row" style="margin-top:8px">
+          <button class="btn btn-sm" data-action="copy" data-copy-text="${esc(preset.values.reality_public_key)}">کپی Public Key</button>
+          <button class="btn btn-sm" data-action="copy" data-copy-text="${esc(preset.values.reality_private_key)}">کپی Private Key</button>
+          <button class="btn btn-sm" data-action="copy" data-copy-text="${esc(preset.values.reality_short_id)}">کپی Short ID</button>
+        </div>
+      </div>` : '') + (preset && preset.requires_domain ? `
+      <div class="note warn">این الگو به <strong>دامنه و گواهی معتبر</strong> نیاز دارد.
+        اگر دامنه ندارید، الگوی «REALITY — بدون دامنه» را انتخاب کنید.</div>` : '') + serverFormHtml(seed),
     footer: `<button class="btn" data-modal-close>انصراف</button><div class="spacer"></div>
       <button class="btn btn-primary" id="saveServer">${isEdit ? 'ذخیرهٔ تغییرات' : 'افزودن سرور'}</button>`,
     onMount: (overlay) => {
@@ -1099,7 +1131,29 @@ function openServerModal(server = null) {
         $$('[data-need-proto]', overlay).forEach((f) => f.classList.toggle('hidden', f.dataset.needProto !== protocol));
       };
       $$('select', overlay).forEach((s) => s.addEventListener('change', sync));
+      const addressInput = $('input[name="server_address"]', overlay);
+      const ipWarn = () => {
+        let box = $('#ipWarning', overlay);
+        const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((addressInput.value || '').trim())
+          || /^\[?[0-9a-f:]+\]?$/i.test((addressInput.value || '').trim());
+        const tls = $('select[name="security"]', overlay).value === 'tls';
+        if (isIp && tls) {
+          if (!box) {
+            box = document.createElement('div');
+            box.id = 'ipWarning';
+            box.className = 'note danger';
+            addressInput.closest('.field').after(box);
+          }
+          box.textContent = '⚠ آدرس IP با TLS کار نمی‌کند: گواهی معتبر فقط برای دامنه صادر می‌شود. ' +
+            'لایهٔ امنیتی را روی REALITY بگذارید (بدون دامنه و بدون گواهی).';
+        } else if (box) {
+          box.remove();
+        }
+      };
+      addressInput.addEventListener('input', ipWarn);
+      $$('select', overlay).forEach((s) => s.addEventListener('change', ipWarn));
       sync();
+      ipWarn();
       $('#saveServer', overlay).addEventListener('click', () => saveServer(server));
     },
   });
@@ -1146,6 +1200,19 @@ async function refreshCoreChip() {
 }
 
 async function renderXray() {
+  if (state.meta && state.meta.builder_only) {
+    viewRoot.innerHTML = `
+      <div class="card"><div class="empty">
+        <span class="empty-icon">✦</span>
+        <strong>حالت «کانفیگ‌ساز» فعال است</strong>
+        <p>در این حالت پنل فقط کاربر و کانفیگ می‌سازد و کاری به هستهٔ Xray ندارد
+        (نه <code>config.json</code> را تغییر می‌دهد، نه ری‌استارت می‌کند).<br />
+        برای مدیریت هسته، سرویس‌ها را با <code>docker compose up -d</code> بالا بیاورید و
+        <code>BUILDER_ONLY=false</code> را در <code>.env</code> بگذارید.</p>
+        <button class="btn btn-primary" data-action="goto" data-view="users">ساخت کانفیگ</button>
+      </div></div>`;
+    return;
+  }
   const [status, config] = await Promise.all([
     refreshCoreChip(),
     run('دریافت کانفیگ', () => api('/api/xray/config')),
@@ -1574,6 +1641,13 @@ document.addEventListener('click', async (event) => {
     case 'open-tab': window.open(trigger.dataset.href, '_blank', 'noopener'); break;
 
     case 'server-create': openServerModal(null); break;
+    case 'server-preset': {
+      const data = await run('دریافت الگو', () => api('/api/servers/presets'));
+      const preset = ((data && data.presets) || []).find((p) => p.id === value || p.id === trigger.dataset.preset);
+      if (!preset) { toast('الگو پیدا نشد', 'error'); break; }
+      openServerModal(null, preset);
+      break;
+    }
     case 'server-edit': {
       const server = state.servers.find((s) => s.id === id);
       if (server) openServerModal(server);
@@ -1830,6 +1904,9 @@ async function afterLogin() {
   $('#userName').textContent = profile.username;
   $('#userAvatar').textContent = (profile.username || 'A').charAt(0).toUpperCase();
   $('#demoChip').classList.toggle('hidden', !meta.demo_mode);
+  $('#builderChip').classList.toggle('hidden', !meta.builder_only);
+  $('#navXray').classList.toggle('hidden', Boolean(meta.builder_only));
+  if (meta.builder_only && state.view === 'xray') state.view = 'users';
   $('#demoChip').title = meta.simulate_traffic
     ? 'داده‌های نمونه + شبیه‌سازی رشد ترافیک (SIMULATE_TRAFFIC=true)'
     : 'کاربران و آمار اولیهٔ نمونه — با SEED_DEMO_DATA=false نصب تمیز داشته باشید';

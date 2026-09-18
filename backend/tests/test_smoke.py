@@ -306,6 +306,54 @@ def test_servers_and_xray_control(client, headers):
     check("user_created" in actions and "server_created" in actions, "audit log recorded actions")
 
 
+def test_presets_and_warnings(client, headers):
+    print("\n[server presets + no-domain warnings]")
+    data = client.get("/api/servers/presets", headers=headers).json()
+    ids = {p["id"] for p in data["presets"]}
+    check("reality-no-domain" in ids and "shadowsocks-no-domain" in ids,
+          f"presets include the no-domain options ({len(ids)} presets)")
+    reality = next(p for p in data["presets"] if p["id"] == "reality-no-domain")
+    check(reality["requires_domain"] is False and len(reality["values"]["reality_public_key"]) > 40,
+          "REALITY preset ships with freshly generated keys")
+    check(any(p["requires_domain"] for p in data["presets"]), "TLS presets are marked as needing a domain")
+
+    ip_server = client.post("/api/servers", headers=headers, json={
+        "server_name": "QA-IP-TLS", "server_address": "203.0.113.10", "server_port": 443,
+        "protocol": "vless", "network": "ws", "security": "tls", "inbound_tag": "QA-IP-TLS",
+    }).json()["server"]
+    check(any("REALITY" in w for w in ip_server["warnings"]),
+          f"IP + TLS produces a domain warning ({ip_server['warnings']})")
+
+    listing = client.get("/api/servers", headers=headers).json()
+    row = next(s for s in listing["servers"] if s["server_name"] == "QA-IP-TLS")
+    check(row["is_ip"] is True and row["warnings"], "servers list carries the warning too")
+    client.delete(f"/api/servers/{ip_server['id']}", headers=headers)
+
+
+def test_builder_only_mode(client, headers):
+    print("\n[builder-only mode]")
+    original = backend.BUILDER_ONLY
+    backend.BUILDER_ONLY = True
+    try:
+        created = client.post("/api/users", headers=headers, json={
+            "username": "qa-builder", "protocol": "vless", "network": "ws", "security": "tls",
+        }).json()
+        check(created["xray"].get("builder_only") is True and created["xray"]["changed"] is False,
+              "creating a user does not touch config.json in builder mode")
+        check(len(created["links"]) >= 1, "links are still generated in builder mode")
+        check(client.get("/api/meta", headers=headers).json()["builder_only"] is True, "meta reports builder mode")
+        check(client.get("/api/xray/status", headers=headers).json()["builder_only"] is True,
+              "xray status reports builder mode")
+        check(client.post("/api/xray/restart", headers=headers).status_code == 400,
+              "restart is refused with a clear message")
+        check(client.put("/api/xray/config", headers=headers,
+                         json={"config": {"inbounds": [], "outbounds": []}}).status_code == 400,
+              "config writes are refused")
+    finally:
+        backend.BUILDER_ONLY = original
+        client.delete("/api/users/qa-builder", headers=headers)
+
+
 def test_password_change(client, headers):
     print("\n[password change]")
     wrong = client.post("/api/auth/change-password", headers=headers,
@@ -358,6 +406,8 @@ def main():
         test_user_crud_and_xray_config(client, headers)
         test_public_subscription(client, headers)
         test_servers_and_xray_control(client, headers)
+        test_presets_and_warnings(client, headers)
+        test_builder_only_mode(client, headers)
         test_password_change(client, headers)
         test_certificates()
 
