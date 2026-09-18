@@ -1,0 +1,98 @@
+# ==============================================================
+#  V2Box Panel — docker compose stack
+#
+#  xray-core  : the proxy (vless/vmess/trojan/shadowsocks)
+#  backend    : FastAPI admin panel + config generator
+#  nginx      : serves the frontend and reverse-proxies /api
+#
+#  start:  docker compose up -d --build
+#  panel:  http://<server-ip>/        (admin / admin123)
+# ==============================================================
+
+services:
+  # ------------------------------------------------ xray core --
+  xray:
+    image: teddysun/xray:latest
+    container_name: xray-core
+    restart: always
+    entrypoint: ["/usr/local/bin/entrypoint.sh"]
+    command: ["run", "-c", "/etc/xray/config.json"]
+    ports:
+      - "443:443"       # vless + reality (no certificate needed)
+      - "8443:8443"     # vless + ws + tls
+      - "2053:2053"     # vless + grpc + tls
+      - "2083:2083"     # vmess + ws + tls
+      - "2087:2087"     # trojan + tcp + tls
+    environment:
+      # CN/SAN used when the entrypoint has to create a self-signed certificate
+      - SNI=${TLS_SNI:-v2box.local}
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json
+      - ./xray/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
+      - ./certs:/etc/xray/certs
+      - ./data/xray-log:/var/log/xray
+    networks:
+      - v2box-net
+    healthcheck:
+      test: ["CMD-SHELL", "xray version || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------- backend --
+  backend:
+    build: ./backend
+    container_name: v2box-backend
+    restart: always
+    expose:
+      - "8000"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-this}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/data/v2box.db}
+      - XRAY_CONFIG_PATH=${XRAY_CONFIG_PATH:-/etc/xray/config.json}
+      - XRAY_CONTAINER_NAME=${XRAY_CONTAINER_NAME:-xray-core}
+      - XRAY_API_HOST=${XRAY_API_HOST:-127.0.0.1}
+      - XRAY_API_PORT=${XRAY_API_PORT:-10085}
+      - XRAY_ACCESS_LOG=${XRAY_ACCESS_LOG:-/var/log/xray/access.log}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - SYNC_INTERVAL=${SYNC_INTERVAL:-60}
+      - CERT_DIR=${CERT_DIR:-/app/certs}
+      - FRONTEND_DIR=${FRONTEND_DIR:-/app/frontend}
+      - XRAY_BACKUP_DIR=${XRAY_BACKUP_DIR:-/app/data/xray-backup}
+      - SEED_DEMO_DATA=${SEED_DEMO_DATA:-true}
+      - PUBLIC_DOMAIN=${PUBLIC_DOMAIN:-}
+      - ACCESS_TOKEN_EXPIRE_HOURS=${ACCESS_TOKEN_EXPIRE_HOURS:-24}
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json
+      - ./certs:/app/certs
+      - ./frontend:/app/frontend:ro
+      - ./data:/app/data
+      - ./data/xray-log:/var/log/xray:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - xray
+    networks:
+      - v2box-net
+
+  # ------------------------------------------------------ nginx --
+  nginx:
+    image: nginx:alpine
+    container_name: v2box-nginx
+    restart: always
+    ports:
+      - "${PANEL_HTTP_PORT:-80}:80"
+      - "${PANEL_ALT_PORT:-8080}:8080"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    networks:
+      - v2box-net
+
+networks:
+  v2box-net:
+    driver: bridge

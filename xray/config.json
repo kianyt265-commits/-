@@ -1,0 +1,329 @@
+{
+  "log": {
+    "access": "/var/log/xray/access.log",
+    "error": "/var/log/xray/error.log",
+    "loglevel": "warning",
+    "dnsLog": false
+  },
+  "api": {
+    "tag": "api",
+    "services": [
+      "HandlerService",
+      "LoggerService",
+      "StatsService"
+    ]
+  },
+  "stats": {},
+  "policy": {
+    "levels": {
+      "0": {
+        "handshake": 4,
+        "connIdle": 300,
+        "uplinkOnly": 2,
+        "downlinkOnly": 5,
+        "statsUserUplink": true,
+        "statsUserDownlink": true,
+        "bufferSize": 10240
+      }
+    },
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true,
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
+    }
+  },
+  "inbounds": [
+    {
+      "tag": "VLESS-REALITY-443",
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "xver": 0,
+          "dest": "www.microsoft.com:443",
+          "serverNames": [
+            "www.microsoft.com",
+            "www.apple.com"
+          ],
+          "privateKey": "mB9xuYdaP2OrReNnfz5biwHiGQPcytSKu1K0GtqxBkE",
+          "minClient": "",
+          "maxClient": "",
+          "maxTimeDiff": 0,
+          "shortIds": [
+            "767339fb"
+          ]
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": false
+      }
+    },
+    {
+      "tag": "VLESS-WS-8443",
+      "listen": "0.0.0.0",
+      "port": 8443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none",
+        "fallbacks": []
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "",
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "minVersion": "1.2",
+          "maxVersion": "1.3",
+          "cipherSuites": "",
+          "certificates": [
+            {
+              "certificateFile": "/etc/xray/certs/fullchain.pem",
+              "keyFile": "/etc/xray/certs/privkey.pem"
+            }
+          ],
+          "rejectUnknownSni": false
+        },
+        "wsSettings": {
+          "acceptProxyProtocol": false,
+          "path": "/v2box-ws",
+          "headers": {}
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": false
+      }
+    },
+    {
+      "tag": "VLESS-GRPC-2053",
+      "listen": "0.0.0.0",
+      "port": 2053,
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "",
+          "alpn": [
+            "h2"
+          ],
+          "minVersion": "1.2",
+          "certificates": [
+            {
+              "certificateFile": "/etc/xray/certs/fullchain.pem",
+              "keyFile": "/etc/xray/certs/privkey.pem"
+            }
+          ]
+        },
+        "grpcSettings": {
+          "serviceName": "v2box-grpc",
+          "multiMode": false,
+          "idle_timeout": 60,
+          "health_check_timeout": 20,
+          "permit_without_stream": false,
+          "initial_windows_size": 0
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": false
+      }
+    },
+    {
+      "tag": "VMESS-WS-2083",
+      "listen": "0.0.0.0",
+      "port": 2083,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [],
+        "disableInsecureEncryption": true
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "",
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "minVersion": "1.2",
+          "certificates": [
+            {
+              "certificateFile": "/etc/xray/certs/fullchain.pem",
+              "keyFile": "/etc/xray/certs/privkey.pem"
+            }
+          ]
+        },
+        "wsSettings": {
+          "acceptProxyProtocol": false,
+          "path": "/v2box-vmess",
+          "headers": {}
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": false
+      }
+    },
+    {
+      "tag": "TROJAN-TCP-2087",
+      "listen": "0.0.0.0",
+      "port": 2087,
+      "protocol": "trojan",
+      "settings": {
+        "clients": [],
+        "fallbacks": []
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "",
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "minVersion": "1.2",
+          "certificates": [
+            {
+              "certificateFile": "/etc/xray/certs/fullchain.pem",
+              "keyFile": "/etc/xray/certs/privkey.pem"
+            }
+          ]
+        },
+        "tcpSettings": {
+          "acceptProxyProtocol": false,
+          "header": {
+            "type": "none"
+          }
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": false
+      }
+    },
+    {
+      "tag": "api",
+      "listen": "0.0.0.0",
+      "port": 10085,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {}
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole",
+      "settings": {
+        "response": {
+          "type": "http"
+        }
+      }
+    },
+    {
+      "tag": "dns-out",
+      "protocol": "dns",
+      "settings": {}
+    },
+    {
+      "tag": "api",
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": [
+          "api"
+        ],
+        "outboundTag": "api"
+      },
+      {
+        "type": "field",
+        "protocol": [
+          "dns"
+        ],
+        "outboundTag": "dns-out"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:category-ads-all",
+          "geosite:malware"
+        ],
+        "outboundTag": "block"
+      }
+    ]
+  },
+  "dns": {
+    "hosts": {},
+    "servers": [
+      "1.1.1.1",
+      "8.8.8.8",
+      "localhost"
+    ]
+  }
+}

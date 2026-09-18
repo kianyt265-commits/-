@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1220" />
+    <meta name="description" content="پنل مدیریت ساخت کانفیگ V2Ray / V2Box — vless، vmess، trojan و shadowsocks" />
+    <title>پنل V2Box — مدیریت کانفیگ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Cpath d='M9 11l7 11 7-11' stroke='%2304121a' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <!-- ============================ login ============================ -->
+    <section id="loginScreen" class="login-screen hidden" aria-label="ورود به پنل">
+      <div class="login-glow"></div>
+      <form id="loginForm" class="login-card" autocomplete="on">
+        <div class="login-brand">
+          <span class="brand-mark">V2</span>
+          <div>
+            <strong>پنل V2Box</strong>
+            <small>مدیریت کانفیگ‌های V2Ray / Xray</small>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>نام کاربری</span>
+          <input type="text" id="loginUsername" name="username" value="admin" autocomplete="username" required />
+        </label>
+
+        <label class="field">
+          <span>رمز عبور</span>
+          <div class="password-wrap">
+            <input type="password" id="loginPassword" name="password" placeholder="••••••••" autocomplete="current-password" required />
+            <button type="button" class="ghost-icon" id="togglePassword" title="نمایش رمز">◉</button>
+          </div>
+        </label>
+
+        <div id="loginError" class="form-error hidden"></div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="loginSubmit">ورود به پنل</button>
+
+        <p class="login-hint">
+          ورود پیش‌فرض: <code>admin</code> / <code>admin123</code><br />
+          بعد از اولین ورود حتماً رمز را از بخش «تنظیمات» تغییر دهید.
+        </p>
+      </form>
+    </section>
+
+    <!-- ============================= app ============================= -->
+    <div id="appShell" class="app-shell hidden">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand-lockup">
+          <span class="brand-mark">V2</span>
+          <div>
+            <strong>پنل V2Box</strong>
+            <small id="brandSub">مدیریت کانفیگ</small>
+          </div>
+        </div>
+
+        <nav class="nav" id="primaryNav" aria-label="منوی اصلی">
+          <button class="nav-item active" data-view="dashboard"><span class="nav-icon">▦</span><span>داشبورد</span></button>
+          <button class="nav-item" data-view="users"><span class="nav-icon">◉</span><span>کاربران</span><em class="nav-badge" id="navUsersCount">۰</em></button>
+          <button class="nav-item" data-view="servers"><span class="nav-icon">⛁</span><span>سرورها</span></button>
+          <button class="nav-item" data-view="xray"><span class="nav-icon">⚙</span><span>هستهٔ Xray</span></button>
+          <button class="nav-item" data-view="logs"><span class="nav-icon">≡</span><span>گزارش‌ها</span></button>
+          <button class="nav-item" data-view="settings"><span class="nav-icon">✦</span><span>تنظیمات</span></button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="core-chip" id="coreChip" title="وضعیت کانتینر xray">
+            <span class="dot dot-unknown"></span>
+            <div>
+              <strong>xray-core</strong>
+              <small id="coreChipState">در حال بررسی…</small>
+            </div>
+          </div>
+          <button class="sidebar-link" id="logoutBtn"><span>⏻</span> خروج از حساب</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <button class="mobile-menu" id="mobileMenu" aria-label="منو">☰</button>
+          <div class="page-title">
+            <strong id="pageTitle">داشبورد</strong>
+            <small id="pageSubtitle">نمای کلی وضعیت پنل</small>
+          </div>
+          <div class="topbar-actions">
+            <span class="chip chip-soft" id="demoChip" title="حالت نمایشی">دمو</span>
+            <button class="btn btn-ghost btn-sm" id="refreshBtn" title="به‌روزرسانی">↻ تازه‌سازی</button>
+            <div class="user-chip" id="userChip">
+              <span class="avatar" id="userAvatar">A</span>
+              <div><strong id="userName">admin</strong><small>مدیر پنل</small></div>
+            </div>
+          </div>
+        </header>
+
+        <div id="viewRoot" class="view-root" tabindex="-1"></div>
+      </main>
+    </div>
+
+    <div id="modalRoot"></div>
+    <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+    <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

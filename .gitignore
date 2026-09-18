@@ -1,0 +1,33 @@
+# --- runtime data (never commit) ---
+data/
+*.db
+*.db-journal
+*.sqlite3
+certs/
+logs/
+*.log
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- node / build artifacts ---
+node_modules/
+dist/
+build/
+
+# --- editor / os ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- xray backups created by the panel ---
+xray/backup/
+data/xray-backup/

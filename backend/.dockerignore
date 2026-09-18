@@ -1,0 +1,12 @@
+# keep the build context small
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+data/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tests/__pycache__/
