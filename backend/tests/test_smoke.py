@@ -79,7 +79,7 @@ def test_health_and_auth(client):
 
 
 def test_bootstrap(client, headers):
-    print("\n[bootstrap: servers imported from config.json + demo users]")
+    print("\n[bootstrap: servers imported from config.json + sample users]")
     servers = client.get("/api/servers", headers=headers).json()
     check(servers["total"] == 5, f"5 inbounds imported as servers (got {servers['total']})")
     defaults = [s for s in servers["servers"] if s["is_default"]]
@@ -87,10 +87,14 @@ def test_bootstrap(client, headers):
     check(defaults and defaults[0]["network"] == "ws" and defaults[0]["security"] == "tls",
           "default server is the vless/ws/tls inbound")
 
-    users = client.get("/api/users", headers=headers).json()
-    check(users["total"] == 5, f"5 demo users seeded (got {users['total']})")
+    users = client.get("/api/users?limit=100", headers=headers).json()
+    expected = len(backend.SAMPLE_USERS)
+    check(users["total"] == expected, f"{expected} sample users seeded (got {users['total']})")
     dash = client.get("/api/dashboard", headers=headers).json()
-    check(dash["total_users"] == 5 and dash["total_servers"] == 5, "dashboard counters")
+    check(dash["total_users"] == expected and dash["total_servers"] == 5, "dashboard counters")
+    check(dash["expired_users"] >= 1 and dash["active_users"] >= 5,
+          f"sample data covers several statuses (expired={dash['expired_users']}, active={dash['active_users']})")
+    check(len(dash["traffic_chart"]) >= 7, f"7 days of traffic history seeded ({len(dash['traffic_chart'])} day(s))")
     check(dash["xray"]["config_ok"] is True, "config.json parses and summarises")
     return servers["servers"], users["users"]
 
@@ -212,7 +216,7 @@ def test_user_crud_and_xray_config(client, headers):
 
 def test_public_subscription(client, headers):
     print("\n[public subscription endpoints]")
-    users = client.get("/api/users?search=demo-ali", headers=headers).json()["users"]
+    users = client.get("/api/users?search=ali.rezaei", headers=headers).json()["users"]
     user = users[0]
     sub_id = user["sub_id"]
 
@@ -228,7 +232,7 @@ def test_public_subscription(client, headers):
     check(plain.status_code == 200 and plain.text.startswith("vless://"), "/sub/{id}/links plaintext")
 
     info = client.get(f"/sub/{sub_id}/info").json()
-    check(info["username"] == "demo-ali" and "qrcode" in info, "/sub/{id}/info")
+    check(info["username"] == "ali.rezaei" and "qrcode" in info, "/sub/{id}/info")
 
     png = client.get(f"/sub/{sub_id}/qrcode.png")
     check(png.status_code == 200 and (png.content[:8] == b"\x89PNG\r\n\x1a\n" or b"<svg" in png.content),

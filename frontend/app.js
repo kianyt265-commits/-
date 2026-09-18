@@ -1297,7 +1297,8 @@ async function renderSettings() {
           <div class="kv-row"><span>فاصلهٔ همگام‌سازی</span><strong>${num(m.sync_interval || 60)} ثانیه</strong></div>
           <div class="kv-row"><span>اعتبار توکن</span><strong>${num(m.token_expire_hours || 24)} ساعت</strong></div>
           <div class="kv-row"><span>docker socket</span><strong>${m.docker ? '<span class="chip chip-accent">متصل</span>' : '<span class="chip chip-warn">بدون دسترسی</span>'}</strong></div>
-          <div class="kv-row"><span>حالت دمو</span><strong>${m.demo_mode ? '<span class="chip chip-warn">فعال</span>' : '<span class="chip chip-mute">غیرفعال</span>'}</strong></div>
+          <div class="kv-row"><span>دادهٔ نمونه</span><strong>${m.demo_mode ? '<span class="chip chip-warn">فعال</span>' : '<span class="chip chip-mute">غیرفعال</span>'}</strong></div>
+          <div class="kv-row"><span>شبیه‌ساز ترافیک</span><strong>${m.simulate_traffic ? '<span class="chip chip-warn">فعال</span>' : '<span class="chip chip-mute">غیرفعال</span>'}</strong></div>
         </div>
       </div>
 
@@ -1830,8 +1831,8 @@ async function afterLogin() {
   $('#userAvatar').textContent = (profile.username || 'A').charAt(0).toUpperCase();
   $('#demoChip').classList.toggle('hidden', !meta.demo_mode);
   $('#demoChip').title = meta.simulate_traffic
-    ? 'حالت نمایشی: داده‌های نمونه و ترافیک شبیه‌سازی‌شده'
-    : 'حالت نمایشی';
+    ? 'داده‌های نمونه + شبیه‌سازی رشد ترافیک (SIMULATE_TRAFFIC=true)'
+    : 'کاربران و آمار اولیهٔ نمونه — با SEED_DEMO_DATA=false نصب تمیز داشته باشید';
   showApp();
   await loadServers();
   await Promise.all([refreshCoreChip(), refreshUserBadge()]);

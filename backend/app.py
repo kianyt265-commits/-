@@ -64,7 +64,8 @@ except ImportError:  # pragma: no cover
 XRAY_CONFIG_PATH = os.getenv("XRAY_CONFIG_PATH", "./xray/config.json")
 SYNC_INTERVAL = int(os.getenv("SYNC_INTERVAL", "60"))
 SEED_DEMO_DATA = os.getenv("SEED_DEMO_DATA", "false").lower() in ("1", "true", "yes")
-SIMULATE_TRAFFIC = os.getenv("SIMULATE_TRAFFIC", str(SEED_DEMO_DATA)).lower() in ("1", "true", "yes")
+# opt-in only: grows the counters of the seeded sample users for screenshots
+SIMULATE_TRAFFIC = os.getenv("SIMULATE_TRAFFIC", "false").lower() in ("1", "true", "yes")
 PUBLIC_DOMAIN = os.getenv("PUBLIC_DOMAIN", "").strip()
 XRAY_ACCESS_LOG = os.getenv("XRAY_ACCESS_LOG", "/var/log/xray/access.log")
 FRONTEND_DIR = os.getenv(
@@ -226,9 +227,9 @@ async def periodic_sync() -> None:
             # 2) refresh `last_connected` from the xray access log
             changed = collect_access_log(db) or changed
 
-            # 3) demo mode only: grow the traffic counters
+            # 3) opt-in simulator for demo installations
             if SIMULATE_TRAFFIC:
-                changed = simulate_demo_traffic(db) or changed
+                changed = simulate_sample_traffic(db) or changed
 
             snapshot_traffic(db)
             db.commit()
@@ -273,22 +274,6 @@ def collect_access_log(db: Session) -> bool:
             if not user.last_connected or (now - user.last_connected).total_seconds() > 60:
                 user.last_connected = now
                 touched = True
-    return touched
-
-
-def simulate_demo_traffic(db: Session) -> bool:
-    """Demo mode only (SEED_DEMO_DATA=true): keeps the dashboard charts alive."""
-    touched = False
-    for user in db.query(User).filter(User.username.like("demo-%")).all():
-        if not user.is_active:
-            continue
-        up = random.randint(2, 90) * 1024 * 1024
-        down = random.randint(20, 600) * 1024 * 1024
-        user.upload = (user.upload or 0) + up
-        user.download = (user.download or 0) + down
-        user.data_used = (user.data_used or 0) + up + down
-        user.last_connected = utcnow()
-        touched = True
     return touched
 
 
@@ -338,44 +323,98 @@ def import_servers_from_config(db: Session, address: Optional[str] = None) -> in
     return len(created)
 
 
-def seed_demo(db: Session) -> None:
-    """Sample users so a fresh panel is not empty (SEED_DEMO_DATA=true)."""
+# A realistic starting dataset (SEED_DEMO_DATA=true): every user sits on an
+# inbound that actually exists in xray/config.json, with plausible traffic,
+# expiry and status so the panel is usable — and demonstrable — right away.
+SAMPLE_USERS = [
+    # username,         protocol, network, security,   limit_gb, expire_days, active, used_gb, made_days_ago, last_seen_min
+    ("ali.rezaei",      "vless",  "ws",    "tls",        100,      62,       True,    38.4,    96,     42),
+    ("sara.karimi",     "vless",  "tcp",   "reality",    200,      18,       True,   121.7,    40,      7),
+    ("reza.mousavi",    "vmess",  "ws",    "tls",         50,       2,       True,    44.2,    30,    180),
+    ("mina.ahmadi",     "trojan", "tcp",   "tls",         30,      -6,       False,   31.5,   120,   8600),
+    ("hamed.nouri",     "vless",  "grpc",  "tls",          0,       0,       True,   210.9,   210,      8),
+    ("negar.sadeghi",   "vless",  "ws",    "tls",         75,      11,       True,    71.2,    12,     65),
+    ("amir.torabi",     "vless",  "tcp",   "reality",     40,      85,       False,    9.1,   200,  20100),
+    ("yasmin.farahi",   "vless",  "grpc",  "tls",         60,      25,       True,    17.3,    25,    320),
+]
+SAMPLE_USERNAMES = [row[0] for row in SAMPLE_USERS]
+
+
+def seed_sample_data(db: Session) -> int:
+    """Insert the sample users + a week of traffic history. Returns the count."""
     if not default_server(db):
-        return
+        return 0
     now = utcnow()
-    samples = [
-        # username,     protocol, network, security,   GB,  days, active
-        ("demo-ali",   "vless",  "ws",   "tls",       50,  90, True),
-        ("demo-sara",  "vless",  "tcp",  "reality",  100,  30, True),
-        ("demo-reza",  "vmess",  "ws",   "tls",       20,   7, True),
-        ("demo-mina",  "trojan", "tcp",  "tls",       10, 200, False),
-        ("demo-hamed", "vless",  "grpc", "tls",        0,   0, True),
-    ]
-    for username, protocol, network, security, limit_gb, days, is_active in samples:
+    created = 0
+    for (username, protocol, network, security, limit_gb, expire_days,
+         is_active, used_gb, made_days_ago, last_seen_min) in SAMPLE_USERS:
         if db.query(User).filter(User.username == username).first():
             continue
-        up = random.randint(200, 9000) * 1024 * 1024
-        down = random.randint(1, 20) * GB
+        used_bytes = int(used_gb * GB)
+        upload = int(used_bytes * 0.08)
+        download = used_bytes - upload
         db.add(User(
             username=username,
             protocol=protocol,
             network=network,
             security=security,
             flow="xtls-rprx-vision" if (protocol == "vless" and security == "reality") else "",
+            fingerprint="chrome",
             data_limit=limit_gb * GB if limit_gb else 0,
-            upload=up,
-            download=down,
-            data_used=up + down,
-            expire_date=now + datetime.timedelta(days=days) if days else None,
+            upload=upload,
+            download=download,
+            data_used=used_bytes,
+            expire_date=now + datetime.timedelta(days=expire_days) if expire_days else None,
             is_active=is_active,
-            created_at=now - datetime.timedelta(days=random.randint(1, 40)),
-            last_connected=now - datetime.timedelta(minutes=random.randint(5, 5000)),
+            max_connections=3 if limit_gb >= 100 else 2,
+            created_at=now - datetime.timedelta(days=made_days_ago),
+            last_connected=now - datetime.timedelta(minutes=last_seen_min),
         ))
+        created += 1
+    db.commit()
+    seed_traffic_history(db, days=7)
+    return created
+
+
+def seed_traffic_history(db: Session, days: int = 7) -> None:
+    """Cumulative hourly samples for the last week, so the chart is not empty."""
+    if db.query(TrafficSnapshot).count():
+        return
+    now = utcnow().replace(minute=0, second=0, microsecond=0)
+    for user in db.query(User).all():
+        up_total, down_total = user.upload or 0, user.download or 0
+        if not up_total + down_total:
+            continue
+        for day in range(days, -1, -1):
+            progress = (days - day) / days
+            curve = 0.12 + 0.88 * (progress ** 0.85)  # starts above zero, like real usage
+            db.add(TrafficSnapshot(
+                bucket=now - datetime.timedelta(days=day),
+                user_id=user.id,
+                upload=int(up_total * curve),
+                download=int(down_total * curve),
+            ))
     db.commit()
 
 
+def simulate_sample_traffic(db: Session) -> bool:
+    """SIMULATE_TRAFFIC=true only: slowly grows the sample users' counters."""
+    touched = False
+    for user in db.query(User).filter(User.username.in_(SAMPLE_USERNAMES)).all():
+        if not user.is_active:
+            continue
+        up = random.randint(2, 90) * 1024 * 1024
+        down = random.randint(20, 600) * 1024 * 1024
+        user.upload = (user.upload or 0) + up
+        user.download = (user.download or 0) + down
+        user.data_used = (user.data_used or 0) + up + down
+        user.last_connected = utcnow()
+        touched = True
+    return touched
+
+
 def bootstrap(db: Session) -> None:
-    """First admin + import of the shipped xray inbounds + optional demo data."""
+    """First admin + import of the shipped xray inbounds + optional sample data."""
     init_db()
 
     # xray cannot start a TLS inbound without a certificate — create a
@@ -402,8 +441,8 @@ def bootstrap(db: Session) -> None:
         print(f"[boot] imported {count} inbound(s) from {XRAY_CONFIG_PATH}", flush=True)
 
     if SEED_DEMO_DATA and db.query(User).count() == 0:
-        seed_demo(db)
-        print("[boot] demo users seeded", flush=True)
+        count = seed_sample_data(db)
+        print(f"[boot] {count} sample user(s) + 7 days of traffic history seeded", flush=True)
 
 
 @asynccontextmanager

@@ -571,8 +571,8 @@ def summarize_config(path: str = XRAY_CONFIG_PATH) -> Dict[str, Any]:
     return {
         "ok": True,
         "loglevel": (config.get("log") or {}).get("loglevel", "warning"),
-        "api_enabled": bool(config.get("api")),
-        "stats_enabled": bool(config.get("stats")),
+        "api_enabled": "api" in config,
+        "stats_enabled": "stats" in config,  # `"stats": {}` still enables it
         "inbounds": inbounds,
         "inbound_count": len(inbounds),
         "outbound_count": len(config.get("outbounds", [])),
